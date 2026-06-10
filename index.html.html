@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>星际狙击手：超载进化</title>
+    <style>
+        :root {
+            --primary: #00f2ff;
+            --danger: #ff4d4d;
+            --success: #2ecc71;
+            --gold: #ffd700;
+            --shield: #3498db;
+        }
+
+        body {
+            margin: 0; padding: 0; overflow: hidden;
+            background: #000; font-family: 'Segoe UI', system-ui, sans-serif;
+            cursor: none; user-select: none;
+        }
+
+        #game-container {
+            position: relative; width: 100vw; height: 100vh;
+            background: radial-gradient(circle at center, #0a1128 0%, #000 100%);
+            perspective: 1000px; transition: background 0.5s;
+        }
+
+        /* 屏幕震动动画 */
+        .shake { animation: shake-anim 0.2s; }
+        @keyframes shake-anim {
+            0% { transform: translate(0,0); }
+            25% { transform: translate(5px, 5px); }
+            50% { transform: translate(-5px, -5px); }
+            100% { transform: translate(0,0); }
+        }
+
+        /* HUD */
+        #hud {
+            position: absolute; top: 0; width: 100%; padding: 20px 40px;
+            display: flex; justify-content: space-between; align-items: flex-start;
+            box-sizing: border-box; z-index: 100;
+        }
+
+        .stat-group { color: white; text-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        .label { font-size: 14px; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
+        .value { font-size: 32px; font-weight: 800; }
+
+        #shield-indicator {
+            margin-top: 10px; padding: 5px 15px; background: rgba(52, 152, 219, 0.2);
+            border: 1px solid var(--shield); border-radius: 20px; font-size: 14px;
+            display: none; color: var(--shield);
+        }
+
+        /* 准星 */
+        #crosshair {
+            position: absolute; width: 50px; height: 50px;
+            border: 2px solid var(--primary); border-radius: 50%;
+            pointer-events: none; z-index: 9999; transform: translate(-50%, -50%);
+            transition: border-color 0.2s, transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #crosshair.combo { border-color: var(--gold); transform: translate(-50%, -50%) scale(1.2); }
+
+        /* 题目看板 */
+        #math-station {
+            position: absolute; top: 100px; left: 50%; transform: translateX(-50%);
+            text-align: center; color: white; z-index: 10;
+        }
+        #question { font-size: 48px; font-weight: 900; text-shadow: 0 0 20px var(--primary); }
+
+        /* 目标 */
+        .target {
+            position: absolute; width: 90px; height: 90px;
+            background: rgba(255,255,255,0.05); border: 2px solid #fff;
+            border-radius: 50%; display: flex; justify-content: center; align-items: center;
+            color: white; font-size: 28px; font-weight: bold;
+            backdrop-filter: blur(5px); animation: fly-in 3.5s linear forwards;
+        }
+
+        @keyframes fly-in {
+            0% { transform: translateZ(-1200px) scale(0.1); opacity: 0; }
+            15% { opacity: 1; }
+            100% { transform: translateZ(500px) scale(4); opacity: 0; }
+        }
+
+        /* 进度条 */
+        #progress-wrap {
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+            width: 60%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px;
+        }
+        #progress-bar {
+            width: 0%; height: 100%; background: var(--primary);
+            box-shadow: 0 0 20px var(--primary); border-radius: 4px; transition: 0.3s;
+        }
+
+        /* 面板 */
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 10000;
+            color: white; text-align: center; padding: 20px;
+        }
+
+        button {
+            background: var(--primary); color: black; border: none;
+            padding: 18px 60px; font-size: 24px; cursor: pointer; font-weight: bold;
+            border-radius: 4px; transition: 0.3s;
+        }
+        button:hover { background: var(--gold); transform: scale(1.05); }
+
+        .analysis-box {
+            background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px;
+            margin: 20px 0; max-width: 500px; border-left: 4px solid var(--danger);
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="hud">
+        <div class="stat-group">
+            <div class="label">Score</div>
+            <div class="value" id="score">0</div>
+            <div id="shield-indicator">🛡️ SHIELD ACTIVE</div>
+        </div>
+        <div class="stat-group" style="text-align: right;">
+            <div class="label">Time Left</div>
+            <div class="value" id="timer">60</div>
+        </div>
+    </div>
+
+    <div id="math-station">
+        <div id="question">READY?</div>
+    </div>
+
+    <div id="progress-wrap"><div id="progress-bar"></div></div>
+    <div id="crosshair"></div>
+
+    <div id="overlay">
+        <h1 style="font-size: 50px; margin-bottom: 10px;">ACE SHOOTER: EVOLVED</h1>
+        <p style="color: var(--primary); font-size: 20px;">目标分数: 350 | 时限: 60s</p>
+        <p>• 射中正确答案得 25 分<br>• 连对 3 题可激活护盾 (防御一次错误)<br>• 射击正确目标将重置干扰项</p>
+        <button onclick="startGame()">启动作战系统</button>
+    </div>
+</div>
+
+<script>
+    const container = document.getElementById('game-container');
+    const crosshair = document.getElementById('crosshair');
+    const scoreEl = document.getElementById('score');
+    const timerEl = document.getElementById('timer');
+    const questionEl = document.getElementById('question');
+    const shieldEl = document.getElementById('shield-indicator');
+    const progressBar = document.getElementById('progress-bar');
+    const overlay = document.getElementById('overlay');
+
+    let state = {
+        score: 0,
+        time: 60,
+        active: false,
+        answer: 0,
+        fullQuestion: "",
+        shield: false,
+        combo: 0,
+        lastSpawn: 0
+    };
+
+    let intervals = {};
+
+    // 鼠标跟踪
+    document.addEventListener('mousemove', e => {
+        crosshair.style.left = e.clientX + 'px';
+        crosshair.style.top = e.clientY + 'px';
+    });
+
+    // 射击逻辑
+    document.addEventListener('mousedown', e => {
+        if (!state.active) return;
+        
+        // 视觉反馈
+        container.classList.add('shake');
+        setTimeout(() => container.classList.remove('shake'), 200);
+
+        const target = document.elementFromPoint(e.clientX, e.clientY);
+        if (target && target.classList.contains('target')) {
+            handleHit(parseInt(target.dataset.value));
+        }
+    });
+
+    function startGame() {
+        state = { score: 0, time: 60, active: true, combo: 0, shield: false };
+        updateUI();
+        overlay.style.display = 'none';
+        nextQuestion();
+        
+        intervals.timer = setInterval(tick, 1000);
+        intervals.spawn = setInterval(spawnTargets, 1700);
+    }
+
+    function tick() {
+        state.time--;
+        timerEl.innerText = state.time;
+        if (state.time <= 10) timerEl.style.color = 'var(--danger)';
+        if (state.time <= 0) endGame("TIME UP", "时间耗尽，防线失守！");
+    }
+
+    function nextQuestion() {
+        const types = ['mul', 'div', 'percent', 'solve'];
+        const type = types[Math.floor(Math.random() * types.length)];
+        
+        let a, b;
+        if (type === 'mul') {
+            a = rand(6, 14); b = rand(4, 15);
+            state.answer = a * b;
+            state.fullQuestion = `${a} × ${b} = ${state.answer}`;
+            questionEl.innerText = `${a} × ${b}`;
+        } else if (type === 'div') {
+            state.answer = rand(4, 15); b = rand(3, 9);
+            a = state.answer * b;
+            state.fullQuestion = `${a} ÷ ${b} = ${state.answer}`;
+            questionEl.innerText = `${a} ÷ ${b}`;
+        } else if (type === 'percent') {
+            a = [40, 80, 120, 200, 300][rand(0, 4)];
+            b = [10, 20, 25, 50][rand(0, 3)];
+            state.answer = (a * b) / 100;
+            state.fullQuestion = `${a} 的 ${b}% 是 ${state.answer}`;
+            questionEl.innerText = `${b}% of ${a}`;
+        } else {
+            a = rand(15, 45); let res = rand(50, 90);
+            state.answer = res - a;
+            state.fullQuestion = `x + ${a} = ${res} ➔ x = ${state.answer}`;
+            questionEl.innerText = `x + ${a} = ${res}`;
+        }
+    }
+
+    function spawnTargets() {
+        if (!state.active) return;
+        // 清除老旧目标
+        document.querySelectorAll('.target').forEach(t => t.remove());
+
+        const pos = [{x:25,y:35},{x:50,y:50},{x:75,y:35},{x:35,y:75},{x:65,y:75}].sort(()=>Math.random()-0.5).slice(0,3);
+        const correctIdx = rand(0, 2);
+
+        pos.forEach((p, i) => {
+            let val = (i === correctIdx) ? state.answer : state.answer + rand(-15, 15);
+            if (i !== correctIdx && val === state.answer) val += rand(1, 5);
+
+            const div = document.createElement('div');
+            div.className = 'target';
+            div.innerText = val;
+            div.style.left = p.x + 'vw'; div.style.top = p.y + 'vh';
+            div.dataset.value = val;
+            container.appendChild(div);
+            div.onanimationend = () => div.remove();
+        });
+    }
+
+    function handleHit(hitVal) {
+        if (hitVal === state.answer) {
+            state.score += 25;
+            state.combo++;
+            
+            // 护盾逻辑
+            if (state.combo % 3 === 0 && !state.shield) {
+                state.shield = true;
+                shieldEl.style.display = 'block';
+            }
+
+            // 连击视觉
+            if (state.combo >= 3) crosshair.classList.add('combo');
+            
+            if (state.score >= 350) endGame("MISSION CLEAR", "完美的狙击！你已成为王牌特工。");
+            else {
+                nextQuestion();
+                spawnTargets(); // 立即生成下一组
+            }
+        } else {
+            if (state.shield) {
+                state.shield = false;
+                state.combo = 0;
+                shieldEl.style.display = 'none';
+                crosshair.classList.remove('combo');
+                // 震动提醒
+                container.style.backgroundColor = 'rgba(255,0,0,0.2)';
+                setTimeout(()=>container.style.backgroundColor='#000', 200);
+            } else {
+                endGame("CRITICAL ERROR", `射击错误！系统已崩溃。`);
+            }
+        }
+        updateUI();
+    }
+
+    function updateUI() {
+        scoreEl.innerText = state.score;
+        progressBar.style.width = Math.min(100, (state.score / 350) * 100) + '%';
+        // 超载模式背景
+        if (state.score >= 250) container.style.background = 'radial-gradient(circle at center, #2b0a0a 0%, #000 100%)';
+    }
+
+    function endGame(title, msg) {
+        state.active = false;
+        Object.values(intervals).forEach(clearInterval);
+        document.querySelectorAll('.target').forEach(t => t.remove());
+
+        const isWin = state.score >= 350;
+        overlay.innerHTML = `
+            <h1 style="font-size: 60px; color: ${isWin?'var(--success)':'var(--danger)'}">${title}</h1>
+            <p style="font-size: 24px;">${msg}</p>
+            
+            <div class="analysis-box">
+                <div class="label" style="color:white">最后题目解析：</div>
+                <div style="font-size: 20px; margin-top:5px;">${state.fullQuestion}</div>
+            </div>
+
+            <div style="margin: 20px 0; font-size: 1.5rem;">战绩: ${state.score} / 350</div>
+            <button onclick="location.reload()">重新初始化</button>
+        `;
+        overlay.style.display = 'flex';
+    }
+
+    function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+</script>
+
+</body>
+</html>
